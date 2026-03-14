@@ -1,6 +1,7 @@
 # Plasma Remote
 
-**Plasma Remote** is a lightweight terminal-based UI for managing windows on KDE Plasma.
+**Plasma Remote** is a lightweight, touch-first terminal UI for managing windows on KDE Plasma.
+It is designed to be used locally or over SSH (so you can remotely move/resize windows on a KDE machine), and is optimized for touchscreens (while also working great with a mouse or stylus).
 It uses `kdotool`, `dbus-send`, and `pactl` to query and control windows, move/resize them (tiling), and swap audio sinks.
 
 ## 📷 Screenshot
@@ -9,10 +10,10 @@ It uses `kdotool`, `dbus-send`, and `pactl` to query and control windows, move/r
 
 ## 🧩 Features
 
-- Visual overview of open windows and monitors in a terminal UI
-- Click-to-activate windows
-- Drag windows around using mouse drag
-- Double-click a window to maximize it (via KDE shortcut)
+- Touch-friendly overview of open windows and monitors in a terminal UI
+- Tap a window to activate it (works with finger, stylus, or mouse)
+- Drag windows by touch/dragging to move them around the desktop
+- Double-tap (or double-click) a window to maximize it (via KDE shortcut)
 - Built-in tiling commands:
   - Left/Right half, quadrants (top-left, top-right, bottom-left, bottom-right)
   - Auto tile (grid layout) and “chaos” tile (random distribution)
@@ -41,12 +42,12 @@ cargo run --release
 
 > The program runs in an alternate screen buffer. Press `q` to quit.
 
-## 🎮 Controls
+## 🎮 Controls (Touch First)
 
-- **Mouse click** on a window to activate it.
-- **Drag** a window to move it.
-- **Double-click** a window to maximize it (KDE shortcut invoked).
-- **Toolbar buttons** (at bottom):
+- **Tap** a window to activate it (touch, stylus, or mouse).
+- **Drag** a window with touch or mouse to move it.
+- **Double-tap** a window to maximize it (KDE shortcut invoked).
+- **Toolbar buttons** (at bottom) are designed to be easy to tap:
   - `<` / `>` to switch between action pages
   - Page 1: tiling commands, monitor moves
   - Page 2: maximize, fullscreen, minimize, close, auto-tile, chaos-tile, audio swap
