@@ -22,6 +22,7 @@ enum Action {
     KdeShortcut(&'static str), 
     CloseWindow,
     SmartAudioSwap,
+    SwapWindows, // THE FIX: We explicitly declare the SwapWindows action!
     AutoTile,
     ChaosTile, 
     CustomTile(TileMode), 
@@ -62,7 +63,6 @@ fn get_windows_and_monitors() -> (Vec<Window>, Vec<Monitor>) {
         let id = id_line.trim();
         if id.is_empty() { continue; }
 
-        // THE FIX: We split the command and the string conversion into two lines so the memory stays alive!
         let title_out = Command::new("kdotool").args(["getwindowname", id]).output().unwrap();
         let title = String::from_utf8_lossy(&title_out.stdout).trim().to_string();
 
@@ -79,6 +79,10 @@ fn get_windows_and_monitors() -> (Vec<Window>, Vec<Monitor>) {
                 let parts: Vec<&str> = dims.split('x').map(|s| s.trim()).collect();
                 if parts.len() == 2 { width = parts[0].parse().unwrap_or(0); height = parts[1].parse().unwrap_or(0); }
             }
+        }
+
+        if x <= -5000 || y <= -5000 {
+            continue; 
         }
 
         let win = Window { id: id.to_string(), title: title.clone(), x, y, width, height };
@@ -185,7 +189,7 @@ fn main() -> io::Result<()> {
     let mut target_page = 0;
     let mut anim_start = Instant::now();
     let mut is_animating = false;
-    let total_pages = 2; 
+    let total_pages = 4; 
 
     loop {
         if !is_animating && dragging_win.is_none() && last_refresh.elapsed() > Duration::from_millis(500) {
@@ -215,7 +219,7 @@ fn main() -> io::Result<()> {
 
             let main_chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Min(5), Constraint::Length(8)]) 
+                .constraints([Constraint::Min(5), Constraint::Length(6)]) 
                 .split(area);
             
             main_view_rect = main_chunks[0];
@@ -261,14 +265,22 @@ fn main() -> io::Result<()> {
                 frame.render_widget(paragraph, rect);
             }
 
-            let toolbar_layout = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Length(4), Constraint::Min(10), Constraint::Length(4)])
+            let toolbar_vertical = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(1), Constraint::Min(3)])
                 .split(main_chunks[1]);
+
+            let title_rect = toolbar_vertical[0];
+            let carousel_container = toolbar_vertical[1];
+
+            let carousel_layout = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Length(8), Constraint::Min(10), Constraint::Length(8)])
+                .split(carousel_container);
             
-            let left_btn_rect = toolbar_layout[0];
-            let carousel_rect = toolbar_layout[1];
-            let right_btn_rect = toolbar_layout[2];
+            let left_btn_rect = carousel_layout[0];
+            let carousel_rect = carousel_layout[1];
+            let right_btn_rect = carousel_layout[2];
 
             let nav_style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
             let left_block = Paragraph::new("\n<").alignment(Alignment::Center).style(nav_style).block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded));
@@ -285,26 +297,48 @@ fn main() -> io::Result<()> {
             let slide_dir = target_page as i32 - current_page as i32;
             let offset_x = (eased * carousel_rect.width as f32) as i32 * slide_dir.signum();
 
-            let page_rows = Layout::default().direction(Direction::Vertical).constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).split(carousel_rect);
-            let grid_chunks_r1 = Layout::default().direction(Direction::Horizontal).constraints(vec![Constraint::Ratio(1, 4); 4]).split(page_rows[0]);
-            let grid_chunks_r2 = Layout::default().direction(Direction::Horizontal).constraints(vec![Constraint::Ratio(1, 4); 4]).split(page_rows[1]);
+            let grid_chunks = Layout::default().direction(Direction::Horizontal).constraints(vec![Constraint::Ratio(1, 4); 4]).split(carousel_rect);
 
-            let p0_r1 = [("◧ LEFT HALF", Action::CustomTile(TileMode::LeftHalf)), ("◨ RIGHT HALF", Action::CustomTile(TileMode::RightHalf)), ("◰ TOP LEFT", Action::CustomTile(TileMode::TopLeft)), ("◳ TOP RIGHT", Action::CustomTile(TileMode::TopRight))];
-            let p0_r2 = [("◲ BOT LEFT", Action::CustomTile(TileMode::BotLeft)), ("◱ BOT RIGHT", Action::CustomTile(TileMode::BotRight)), ("📺 TO LEFT MON", Action::KdeShortcut("Window One Screen to the Left")), ("TO RIGHT MON 📺", Action::KdeShortcut("Window One Screen to the Right"))];
+            let pages = [
+                ("◆ TILING: HALVES & QUADRANTS ◆", [
+                    ("◧ LEFT HALF", Action::CustomTile(TileMode::LeftHalf)),
+                    ("◨ RIGHT HALF", Action::CustomTile(TileMode::RightHalf)),
+                    ("◰ TOP LEFT", Action::CustomTile(TileMode::TopLeft)),
+                    ("◳ TOP RIGHT", Action::CustomTile(TileMode::TopRight)),
+                ]),
+                ("◆ MORE TILING & MACROS ◆", [
+                    ("◲ BOT LEFT", Action::CustomTile(TileMode::BotLeft)),
+                    ("◱ BOT RIGHT", Action::CustomTile(TileMode::BotRight)),
+                    ("⊞ AUTO TILE", Action::AutoTile),
+                    ("🎲 CHAOS TILE", Action::ChaosTile),
+                ]),
+                ("◆ SCREEN MOVEMENT & AUDIO ◆", [
+                    ("📺 TO LEFT MON", Action::KdeShortcut("Window One Screen to the Left")),
+                    ("TO RIGHT MON 📺", Action::KdeShortcut("Window One Screen to the Right")),
+                    ("🔄 SWAP SCREENS", Action::SwapWindows),   
+                    ("🎵 SWAP AUDIO", Action::SmartAudioSwap),  
+                ]),
+                ("◆ WINDOW CONTROLS ◆", [
+                    ("🗗 TOGGLE MAX", Action::KdeShortcut("Window Maximize")),
+                    ("🔲 FULLSCREEN", Action::KdeShortcut("Window Fullscreen")),
+                    ("🔽 MINIMIZE", Action::KdeShortcut("Window Minimize")),
+                    ("❌ CLOSE", Action::CloseWindow),
+                ]),
+            ];
 
-            let p1_r1 = [("🗗 TOGGLE MAX", Action::KdeShortcut("Window Maximize")), ("🔲 FULLSCREEN", Action::KdeShortcut("Window Fullscreen")), ("🔽 MINIMIZE", Action::KdeShortcut("Window Minimize")), ("❌ CLOSE", Action::CloseWindow)];
-            let p1_r2 = [("⊞ AUTO TILE", Action::AutoTile), ("🎲 CHAOS TILE", Action::ChaosTile), ("🔄 SWAP SCREENS", Action::SmartAudioSwap), ("🎵 AUDIO SWAP", Action::SmartAudioSwap)];
+            let title_text = pages[target_page as usize].0;
+            let title_para = Paragraph::new(title_text).alignment(Alignment::Center).style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+            frame.render_widget(title_para, title_rect);
 
             let pages_to_draw = if is_animating { vec![current_page, target_page] } else { vec![current_page] };
             
             for &page in &pages_to_draw {
                 let page_offset = if page == current_page { -offset_x } else { (carousel_rect.width as i32 * slide_dir.signum()) - offset_x };
-                
-                let (r1_data, r2_data) = if page == 0 { (p0_r1, p0_r2) } else { (p1_r1, p1_r2) };
+                let page_data = &pages[page as usize].1;
 
                 for i in 0..4 {
-                    render_offset_button(frame, r1_data[i].0, grid_chunks_r1[i], page_offset, carousel_rect, r1_data[i].1, &mut click_map_buttons);
-                    render_offset_button(frame, r2_data[i].0, grid_chunks_r2[i], page_offset, carousel_rect, r2_data[i].1, &mut click_map_buttons);
+                    let text = format!("\n{}", page_data[i].0);
+                    render_offset_button(frame, &text, grid_chunks[i], page_offset, carousel_rect, page_data[i].1, &mut click_map_buttons);
                 }
             }
         })?;
@@ -360,25 +394,46 @@ fn main() -> io::Result<()> {
                                         match action {
                                             Action::PrevPage => { if current_page > 0 { target_page = current_page - 1; is_animating = true; anim_start = Instant::now(); } },
                                             Action::NextPage => { if current_page < total_pages - 1 { target_page = current_page + 1; is_animating = true; anim_start = Instant::now(); } },
+                                            
                                             Action::SmartAudioSwap => {
                                                 let mut hdmi_sink = String::new(); let mut desk_sink = String::new();
                                                 if let Ok(out) = Command::new("pactl").args(["list", "short", "sinks"]).output() {
                                                     for line in String::from_utf8_lossy(&out.stdout).lines() {
+                                                        let line_lower = line.to_lowercase();
                                                         let parts: Vec<&str> = line.split_whitespace().collect();
                                                         if parts.len() >= 2 {
-                                                            let s = parts[1].to_string();
-                                                            if s.contains("hdmi") { hdmi_sink = s.clone(); }
-                                                            else if s.contains("Focusrite") { desk_sink = s.clone(); }
-                                                            else if desk_sink.is_empty() && s.contains("usb") { desk_sink = s.clone(); } 
+                                                            let name = parts[1].to_string(); 
+                                                            if line_lower.contains("hdmi") { hdmi_sink = name.clone(); }
+                                                            else if line_lower.contains("focusrite") { desk_sink = name.clone(); }
+                                                            else if desk_sink.is_empty() && line_lower.contains("usb") { desk_sink = name.clone(); } 
                                                         }
                                                     }
                                                 }
                                                 if let Ok(out) = Command::new("pactl").arg("get-default-sink").output() {
-                                                    let cur = String::from_utf8_lossy(&out.stdout);
+                                                    let cur = String::from_utf8_lossy(&out.stdout).to_lowercase();
                                                     if cur.contains("hdmi") && !desk_sink.is_empty() { let _ = Command::new("pactl").args(["set-default-sink", &desk_sink]).output(); } 
                                                     else if !hdmi_sink.is_empty() { let _ = Command::new("pactl").args(["set-default-sink", &hdmi_sink]).output(); }
                                                 }
                                             },
+
+                                            Action::SwapWindows => {
+                                                if monitors.len() >= 2 {
+                                                    let windows_clone = windows.clone();
+                                                    let mon1 = monitors[0].clone();
+                                                    std::thread::spawn(move || {
+                                                        for win in windows_clone {
+                                                            let cx = win.x + (win.width / 2);
+                                                            let is_mon1 = cx >= mon1.x && cx <= mon1.x + mon1.width;
+                                                            let _ = Command::new("kdotool").args(["windowactivate", &win.id]).output();
+                                                            std::thread::sleep(Duration::from_millis(50));
+                                                            let shortcut = if is_mon1 { "Window One Screen to the Right" } else { "Window One Screen to the Left" };
+                                                            let _ = Command::new("dbus-send").args(["--session", "--dest=org.kde.kglobalaccel", "--type=method_call", "/component/kwin", "org.kde.kglobalaccel.Component.invokeShortcut", &format!("string:{}", shortcut)]).output();
+                                                            std::thread::sleep(Duration::from_millis(50)); 
+                                                        }
+                                                    });
+                                                }
+                                            },
+
                                             Action::CustomTile(mode) => {
                                                 let mut target_mon = monitors.first().cloned();
                                                 if let Some(awin) = windows.iter().find(|w| w.id == active_window_id) {
@@ -463,7 +518,16 @@ fn main() -> io::Result<()> {
                             }
                         },
                         
-                        MouseEventKind::Drag(MouseButton::Left) => {
+                        MouseEventKind::Up(_) => {
+                            if dragging_win.is_some() {
+                                dragging_win = None;
+                                let data = get_windows_and_monitors(); windows = data.0; monitors = data.1;
+                                active_window_id = get_active_window();
+                                last_refresh = Instant::now();
+                            }
+                        },
+
+                        _ => {
                             if let Some((ref win_id, off_x, off_y)) = dragging_win {
                                 let term_w = main_view_rect.width as f64; let term_h = main_view_rect.height as f64;
                                 if term_w > 0.0 && term_h > 0.0 {
@@ -479,17 +543,7 @@ fn main() -> io::Result<()> {
                                     if let Some(win) = windows.iter_mut().find(|w| &w.id == win_id) { win.x = new_desk_x.round() as i32; win.y = new_desk_y.round() as i32; }
                                 }
                             }
-                        },
-                        
-                        MouseEventKind::Up(MouseButton::Left) => {
-                            if dragging_win.is_some() {
-                                dragging_win = None;
-                                let data = get_windows_and_monitors(); windows = data.0; monitors = data.1;
-                                active_window_id = get_active_window();
-                                last_refresh = Instant::now();
-                            }
-                        },
-                        _ => {}
+                        }
                     }
                 }
                 _ => {}
